@@ -18,7 +18,7 @@
 <p>
 
 ## 🔥 Latest News!
-* Jun 24, 2025: 📊 We have published [Phantom-Data](https://phantom-video.github.io/Phantom-Data/), the first general-purpose large-scale cross-pair dataset, which provides a detailed introduction to the core cross-pair data construction method for subject-consistent video generation tasks.
+* Jun 24, 2025: 📊 We have published [Phantom-Data](https://phantom-video.github.io/Phantom-Data/), the first general-purpose large-scale cross-pair dataset, which introduces a core cross-pair data construction method for subject-consistent video generation tasks.
 * May 27, 2025: 🎉 We have released the Phantom-Wan-14B model, a more powerful Subject-to-Video generation model. 
 * Apr 23, 2025: 😊 Thanks to [ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper/tree/dev) for adapting ComfyUI to Phantom-Wan-1.3B (May 27: the 14B model has also been adapted.). Everyone is welcome to use it!
 * Apr 21, 2025: 👋 Phantom-Wan is coming! We adapted the Phantom framework into the [Wan2.1](https://github.com/Wan-Video/Wan2.1) video generation model. The inference codes and checkpoint have been released.

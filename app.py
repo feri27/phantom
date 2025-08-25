@@ -1,301 +1,267 @@
-"""
-Gradio UI for Phantom Video Generation
-"""
 import gradio as gr
-import requests
-import os
 import subprocess
-import uuid
-import tempfile
+import os
 import shutil
-from pathlib import Path
-import cv2
-import numpy as np
+import random
+import re
 
-# Directories
-UPLOAD_DIR = Path("uploads")
-OUTPUT_DIR = Path("outputs")
-EXAMPLES_DIR = Path("examples")
+# Define the tasks and their default settings based on generate.py and README.md
+TASKS = {
+    "s2v-1.3B": {
+        "size": "832*480",
+        "frame_num": 81,
+        "sample_steps": 40,
+        "sample_solver": "unipc",
+        "sample_shift": 5.0,
+        "guide_scale_img": 5.0,
+        "guide_scale_text": 7.5
+    },
+    "s2v-14B": {
+        "size": "832*480",
+        "frame_num": 121,
+        "sample_steps": 40,
+        "sample_solver": "unipc",
+        "sample_shift": 5.0,
+        "guide_scale_img": 5.0,
+        "guide_scale_text": 7.5
+    },
+    "t2v-1.3B": {
+        "size": "1280*720",
+        "frame_num": 81,
+        "sample_steps": 50,
+        "sample_solver": "unipc",
+        "sample_shift": 5.0,
+        "guide_scale": 5.0
+    },
+    "t2v-14B": {
+        "size": "1280*720",
+        "frame_num": 81,
+        "sample_steps": 50,
+        "sample_solver": "unipc",
+        "sample_shift": 5.0,
+        "guide_scale": 5.0
+    },
+    "t2i-14B": {
+        "size": "1280*720",
+        "frame_num": 1,
+        "sample_steps": 50,
+        "sample_solver": "unipc",
+        "sample_shift": 5.0,
+        "guide_scale": 5.0
+    },
+    "i2v-14B": {
+        "size": "1280*720",
+        "frame_num": 81,
+        "sample_steps": 40,
+        "sample_solver": "unipc",
+        "sample_shift": 3.0,
+        "guide_scale": 5.0
+    }
+}
 
-# Create directories
-UPLOAD_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
+SUPPORTED_SIZES = ["1280*720", "720*1280", "832*480", "480*832", "1024*576", "576*1024", "720*480", "480*720", "640*480", "480*640", "1024*1024"]
 
-def generate_video(
-    prompt,
-    reference_image,
-    resolution,
-    base_seed,
-    model_choice,
-    num_frames,
-    fps,
-    progress=gr.Progress()
-):
-    """Generate video using Phantom model"""
-    
-    if not prompt.strip():
-        return None, "Please enter a prompt"
-    
-    progress(0.1, desc="Preparing generation...")
-    
-    try:
-        # Generate unique ID
-        request_id = str(uuid.uuid4())
-        
-        # Prepare paths
-        output_path = OUTPUT_DIR / f"{request_id}_output.mp4"
-        
-        # Handle reference image
-        ref_image_path = None
-        if reference_image is not None:
-            ref_image_path = UPLOAD_DIR / f"{request_id}_ref.png"
-            # Save uploaded image
-            with open(ref_image_path, "wb") as f:
-                f.write(reference_image)
-        
-        progress(0.2, desc="Setting up model...")
-        
-        # Map model choice to path
-        model_paths = {
-            "Phantom-Wan-1.3B": "models/Phantom-Wan-1.3B",
-            "Wan2.1-T2V-1.3B": "models/Wan2.1-T2V-1.3B"
-        }
-        model_path = model_paths.get(model_choice, "models/Phantom-Wan-1.3B")
-        
-        # Build command
-        cmd = [
-            "python", "generate.py",
-            "--prompt", prompt,
-            "--model_path", model_path,
-            "--resolution", resolution,
-            "--base_seed", str(base_seed),
-            "--num_frames", str(num_frames),
-            "--fps", str(fps),
-            "--output", str(output_path)
-        ]
-        
-        if ref_image_path and ref_image_path.exists():
-            cmd.extend(["--reference_image", str(ref_image_path)])
-        
-        progress(0.3, desc="Running inference...")
-        
-        # Run generation
-        print(f"Running: {' '.join(cmd)}")
-        
-        # Use Popen for better progress tracking
-        process = subprocess.Popen(
-            cmd, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, 
-            text=True,
-            universal_newlines=True
-        )
-        
-        # Monitor progress
-        for i in range(30):  # Simulate progress
-            if process.poll() is not None:
-                break
-            progress(0.3 + (i * 0.02), desc=f"Generating video... ({i+1}/30)")
-            import time
-            time.sleep(2)
-        
-        stdout, stderr = process.communicate(timeout=300)
-        
-        if process.returncode != 0:
-            error_msg = f"Generation failed:\n{stderr}\n{stdout}"
-            print(error_msg)
-            return None, error_msg
-        
-        progress(0.9, desc="Finalizing...")
-        
-        # Check if output exists
-        if not output_path.exists():
-            return None, "Output video was not generated. Check model paths and dependencies."
-        
-        progress(1.0, desc="Complete!")
-        
-        # Return the video path and success message
-        return str(output_path), f"✅ Video generated successfully!\nOutput: {output_path.name}"
-        
-    except subprocess.TimeoutExpired:
-        return None, "⏰ Generation timeout. Try reducing frames or simplifying prompt."
-    except Exception as e:
-        error_msg = f"❌ Error: {str(e)}"
-        print(error_msg)
-        return None, error_msg
-
-def get_example_images():
-    """Get list of example reference images"""
-    example_images = []
-    if EXAMPLES_DIR.exists():
-        for img_path in EXAMPLES_DIR.glob("ref*.png"):
-            example_images.append(str(img_path))
-    return example_images[:5]  # Limit to 5 examples
-
-# Example prompts
-EXAMPLE_PROMPTS = [
-    "A beautiful sunset over the ocean with gentle waves",
-    "A cat walking through a garden with flowers blooming",
-    "Rain drops falling on a window with city lights in background",
-    "Smoke rising from a cup of coffee on a wooden table",
-    "Leaves falling from a tree in autumn wind"
-]
-
-# Create Gradio interface
-def create_interface():
-    with gr.Blocks(
-        title="Phantom Video Generation",
-        theme=gr.themes.Soft(),
-        css="""
-        .gradio-container {
-            max-width: 1200px !important;
-        }
-        .generate-btn {
-            background: linear-gradient(45deg, #FF6B6B, #4ECDC4) !important;
-            color: white !important;
-            font-weight: bold !important;
-        }
-        """
-    ) as iface:
-        
-        gr.Markdown("""
-        # 🎬 Phantom Video Generation
-        
-        Generate high-quality videos from text prompts using the Phantom-Wan-1.3B model.
-        
-        **Features:**
-        - Subject-consistent video generation
-        - Reference image support
-        - Customizable resolution and frame count
-        - Fast inference with optimized models
-        """)
-        
-        with gr.Row():
-            with gr.Column(scale=1):
-                gr.Markdown("### 📝 Input Settings")
-                
-                prompt = gr.Textbox(
-                    label="Text Prompt",
-                    placeholder="Describe the video you want to generate...",
-                    lines=3,
-                    value="A beautiful sunset over the ocean with gentle waves"
-                )
-                
-                with gr.Row():
-                    prompt_examples = gr.Examples(
-                        examples=EXAMPLE_PROMPTS,
-                        inputs=prompt,
-                        label="Example Prompts"
-                    )
-                
-                reference_image = gr.File(
-                    label="Reference Image (Optional)",
-                    file_types=["image"],
-                    type="binary"
-                )
-                
-                with gr.Row():
-                    resolution = gr.Dropdown(
-                        choices=["512x320", "768x512", "1024x640"],
-                        value="512x320",
-                        label="Resolution"
-                    )
-                    
-                    model_choice = gr.Dropdown(
-                        choices=["Phantom-Wan-1.3B", "Wan2.1-T2V-1.3B"],
-                        value="Phantom-Wan-1.3B",
-                        label="Model"
-                    )
-                
-                with gr.Row():
-                    num_frames = gr.Slider(
-                        minimum=16,
-                        maximum=50,
-                        value=25,
-                        step=1,
-                        label="Number of Frames"
-                    )
-                    
-                    fps = gr.Slider(
-                        minimum=4,
-                        maximum=24,
-                        value=8,
-                        step=1,
-                        label="FPS"
-                    )
-                
-                base_seed = gr.Number(
-                    value=42,
-                    label="Seed (for reproducibility)",
-                    precision=0
-                )
-                
-                generate_btn = gr.Button(
-                    "🎬 Generate Video",
-                    variant="primary",
-                    elem_classes=["generate-btn"]
-                )
-            
-            with gr.Column(scale=1):
-                gr.Markdown("### 🎥 Output")
-                
-                output_video = gr.Video(
-                    label="Generated Video",
-                    height=400
-                )
-                
-                output_message = gr.Textbox(
-                    label="Status",
-                    lines=3,
-                    max_lines=5
-                )
-                
-                gr.Markdown("""
-                ### 💡 Tips:
-                - Use descriptive prompts for better results
-                - Reference images help maintain subject consistency
-                - Lower frame counts generate faster
-                - Higher FPS creates smoother motion
-                - Experiment with different seeds for variation
-                """)
-        
-        # Connect the generate button
-        generate_btn.click(
-            fn=generate_video,
-            inputs=[
-                prompt,
-                reference_image,
-                resolution,
-                base_seed,
-                model_choice,
-                num_frames,
-                fps
-            ],
-            outputs=[output_video, output_message],
-            show_progress=True
-        )
-        
-        gr.Markdown("""
-        ---
-        
-        **Phantom Video Generation Framework** | Powered by Phantom-Wan-1.3B
-        
-        For more information, visit: [GitHub Repository](https://github.com/feri27/phantom)
-        """)
-    
-    return iface
-
-if __name__ == "__main__":
-    # Create and launch interface
-    demo = create_interface()
-    
-    # Launch with configuration
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,
-        show_error=True,
-        show_tips=True,
-        enable_queue=True,
-        max_threads=1
+def update_defaults(task):
+    config = TASKS.get(task, {})
+    return (
+        config.get("size", "1280*720"),
+        config.get("frame_num", 81),
+        config.get("sample_steps", 50),
+        config.get("sample_solver", "unipc"),
+        config.get("sample_shift", 5.0)
     )
+
+def generate_video_or_image(
+    task,
+    prompt,
+    ref_images,
+    size,
+    frame_num,
+    sample_steps,
+    sample_solver,
+    sample_shift,
+    base_seed,
+):
+    if not prompt:
+        raise gr.Error("Prompt cannot be empty.")
+    
+    if not os.path.exists("./Wan2.1-T2V-1.3B"):
+        raise gr.Error("Wan2.1-T2V-1.3B model not found. Please run the model download script.")
+    
+    if task == "s2v-1.3B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-1.3B.pth"):
+        raise gr.Error("Phantom-Wan-1.3B model not found. Please run the model download script.")
+    elif task == "s2v-14B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-14B.pth"):
+        raise gr.Error("Phantom-Wan-14B model not found. Please run the model download script.")
+
+    # Sanitize prompt for filename
+    sanitized_prompt = re.sub(r'[^a-zA-Z0-9_ -]', '', prompt).replace(" ", "_").replace("/", "_")[:50]
+    output_dir = "generated_outputs"
+    os.makedirs(output_dir, exist_ok=True)
+    save_file = os.path.join(output_dir, f"{sanitized_prompt}_{random.randint(1000, 9999)}")
+    
+    # Save reference images to a temporary directory
+    ref_image_paths = []
+    if ref_images and "s2v" in task:
+        ref_image_dir = "temp_ref_images"
+        shutil.rmtree(ref_image_dir, ignore_errors=True)
+        os.makedirs(ref_image_dir)
+        for i, img in enumerate(ref_images):
+            temp_path = os.path.join(ref_image_dir, f"ref_img_{i}.png")
+            img.save(temp_path)
+            ref_image_paths.append(temp_path)
+    
+    # Construct the command
+    command = [
+        "python", "generate.py",
+        "--task", task,
+        "--prompt", prompt,
+        "--size", size,
+        "--frame_num", str(frame_num),
+        "--sample_steps", str(sample_steps),
+        "--sample_solver", sample_solver,
+        "--sample_shift", str(sample_shift),
+        "--base_seed", str(base_seed),
+        "--ckpt_dir", "./Wan2.1-T2V-1.3B",
+        "--save_file", save_file
+    ]
+
+    if "s2v" in task:
+        phantom_ckpt_path = "./Phantom-Wan-Models/Phantom-Wan-1.3B.pth" if "1.3B" in task else "./Phantom-Wan-Models/Phantom-Wan-14B.pth"
+        command.extend(["--phantom_ckpt", phantom_ckpt_path])
+        if ref_image_paths:
+            command.extend(["--ref_image", ",".join(ref_image_paths)])
+    
+    # Run the command
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    
+    # Stream output to Gradio
+    output_log = []
+    while True:
+        line = process.stdout.readline()
+        if not line and process.poll() is not None:
+            break
+        if line:
+            output_log.append(line)
+            yield "\n".join(output_log), None, None
+    
+    stderr = process.stderr.read()
+    if process.returncode != 0:
+        raise gr.Error(f"Error during generation: {stderr}")
+
+    # Determine output path and type
+    if "t2i" in task:
+        result_path = f"{save_file}.png"
+        return_value = gr.Image(value=result_path, label="Generated Image")
+    else:
+        result_path = f"{save_file}.mp4"
+        return_value = gr.Video(value=result_path, label="Generated Video")
+    
+    return "\n".join(output_log), return_value
+
+with gr.Blocks(title="Phantom-Wan Generator") as demo:
+    gr.Markdown("# 👻 Phantom-Wan: Subject-Consistent Video Generation")
+    gr.Markdown("Generate videos and images with subject consistency using the Phantom-Wan model.")
+    
+    with gr.Row():
+        with gr.Column(scale=1):
+            with gr.Group():
+                task_selector = gr.Dropdown(
+                    label="Task",
+                    choices=list(TASKS.keys()),
+                    value="s2v-1.3B",
+                    interactive=True
+                )
+                prompt_input = gr.Textbox(
+                    label="Prompt",
+                    placeholder="Enter your prompt here."
+                )
+                
+                ref_image_gallery = gr.File(
+                    label="Reference Images (for s2v tasks, up to 4)",
+                    file_count="multiple",
+                    file_types=["image"],
+                    interactive=True
+                )
+        
+        with gr.Column(scale=1):
+            with gr.Accordion("Advanced Settings", open=False):
+                with gr.Row():
+                    size_dropdown = gr.Dropdown(
+                        label="Size",
+                        choices=SUPPORTED_SIZES,
+                        value="832*480",
+                        interactive=True
+                    )
+                    frame_num_slider = gr.Slider(
+                        label="Frame Number (4n+1)",
+                        minimum=1,
+                        maximum=201,
+                        step=4,
+                        value=81,
+                        interactive=True
+                    )
+                with gr.Row():
+                    sample_steps_slider = gr.Slider(
+                        label="Sampling Steps",
+                        minimum=1,
+                        maximum=100,
+                        step=1,
+                        value=40,
+                        interactive=True
+                    )
+                    sample_solver_dropdown = gr.Dropdown(
+                        label="Sample Solver",
+                        choices=['unipc', 'dpm++'],
+                        value='unipc',
+                        interactive=True
+                    )
+                with gr.Row():
+                    sample_shift_slider = gr.Slider(
+                        label="Sample Shift",
+                        minimum=0,
+                        maximum=10,
+                        step=0.1,
+                        value=5.0,
+                        interactive=True
+                    )
+                    base_seed_number = gr.Number(
+                        label="Seed (-1 for random)",
+                        value=-1,
+                        step=1,
+                        interactive=True
+                    )
+
+    generate_btn = gr.Button("Generate!", variant="primary")
+    
+    with gr.Row():
+        with gr.Column():
+            output_log = gr.Textbox(label="Process Log", lines=10, max_lines=10, interactive=False)
+        with gr.Column():
+            output_image = gr.Image(label="Generated Image")
+            output_video = gr.Video(label="Generated Video")
+
+    # Event handlers
+    task_selector.change(
+        update_defaults,
+        inputs=[task_selector],
+        outputs=[size_dropdown, frame_num_slider, sample_steps_slider, sample_solver_dropdown, sample_shift_slider]
+    )
+
+    generate_btn.click(
+        fn=generate_video_or_image,
+        inputs=[
+            task_selector,
+            prompt_input,
+            ref_image_gallery,
+            size_dropdown,
+            frame_num_slider,
+            sample_steps_slider,
+            sample_solver_dropdown,
+            sample_shift_slider,
+            base_seed_number
+        ],
+        outputs=[output_log, output_image, output_video]
+    )
+    
+if __name__ == "__main__":
+    demo.launch(server_name="0.0.0.0", server_port=7860)

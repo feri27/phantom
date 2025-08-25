@@ -4,6 +4,7 @@ import os
 import shutil
 import random
 import re
+from PIL import Image  # Tambahkan baris ini
 
 # Define the tasks and their default settings based on generate.py and README.md
 TASKS = {
@@ -105,10 +106,12 @@ def generate_video_or_image(
         ref_image_dir = "temp_ref_images"
         shutil.rmtree(ref_image_dir, ignore_errors=True)
         os.makedirs(ref_image_dir)
-        for i, img in enumerate(ref_images):
-            temp_path = os.path.join(ref_image_dir, f"ref_img_{i}.png")
-            img.save(temp_path)
-            ref_image_paths.append(temp_path)
+        for i, img_path in enumerate(ref_images):
+            # Perbaikan: Buka file yang diunggah menggunakan PIL sebelum menyimpannya kembali.
+            with Image.open(img_path) as img:
+                temp_path = os.path.join(ref_image_dir, f"ref_img_{i}.png")
+                img.save(temp_path)
+                ref_image_paths.append(temp_path)
     
     # Construct the command
     command = [

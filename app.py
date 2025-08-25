@@ -133,6 +133,8 @@ def generate_video_or_image(
         command.extend(["--phantom_ckpt", phantom_ckpt_path])
         if ref_image_paths:
             command.extend(["--ref_image", ",".join(ref_image_paths)])
+
+    os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
     
     # Run the command
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

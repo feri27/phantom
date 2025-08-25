@@ -506,12 +506,16 @@ def generate(args):
                 value_range=(-1, 1))
         else:
             logging.info(f"Saving generated video to {args.save_file}")
+
+            video = ((video + 1) / 2).clamp(0, 1) * 255
+            video = video.to(torch.uint8)
+            
             cache_video(
                 tensor=video[None],
                 save_file=args.save_file,
                 fps=cfg.sample_fps,
                 nrow=1,
-                normalize=True,
+                normalize=False,
                 value_range=(-1, 1))
     logging.info("Finished.")
 

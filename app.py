@@ -153,15 +153,44 @@ def generate_video_or_image(
     if process.returncode != 0:
         raise gr.Error(f"Error during generation: {stderr}")
 
-    # Determine output path and type
+    # Determine output path and type with validation
     if "t2i" in task:
         result_path = f"{save_file}.png"
-        return_value = gr.Image(value=result_path, label="Generated Image")
+        # Validasi file image
+        if not os.path.exists(result_path):
+            raise gr.Error(f"Generated image file not found: {result_path}")
+        try:
+            # Test buka image untuk memastikan valid
+            with Image.open(result_path) as test_img:
+                test_img.verify()
+            return_value = gr.Image(value=result_path, label="Generated Image")
+        except Exception as e:
+            raise gr.Error(f"Generated image file is corrupted: {e}")
     else:
         result_path = f"{save_file}.mp4"
-        return_value = gr.Video(value=result_path, label="Generated Video")
+        # Validasi file video
+        if not os.path.exists(result_path):
+            raise gr.Error(f"Generated video file not found: {result_path}")
+        
+        # Check file size (video kosong biasanya sangat kecil)
+        file_size = os.path.getsize(result_path)
+        if file_size < 1024:  # Kurang dari 1KB kemungkinan kosong/rusak
+            raise gr.Error(f"Generated video file appears to be corrupted (size: {file_size} bytes)")
+        
+        try:
+            # Additional validation bisa ditambahkan di sini jika ada library video
+            return_value = gr.Video(value=result_path, label="Generated Video")
+        except Exception as e:
+            raise gr.Error(f"Error loading generated video: {e}")
     
-    return "\n".join(output_log), return_value
+    # Clean up temporary reference images
+    if ref_image_paths:
+        try:
+            shutil.rmtree("temp_ref_images", ignore_errors=True)
+        except:
+            pass  # Ignore cleanup errors
+    
+    return "\n".join(output_log), return_value, None if "t2i" in task else return_value
 
 with gr.Blocks(title="Phantom-Wan Generator") as demo:
     gr.Markdown("# 👻 Phantom-Wan: Subject-Consistent Video Generation")

@@ -507,16 +507,57 @@ def generate(args):
         else:
             logging.info(f"Saving generated video to {args.save_file}")
 
-            # video = ((video + 1) / 2).clamp(0, 1) * 255
-            # video = video.to(torch.uint8)
-            
-            cache_video(
-                tensor=video[None],
-                save_file=args.save_file,
-                fps=cfg.sample_fps,
-                nrow=1,
-                normalize=True,
-                value_range=(-1, 1))
+            try:
+                # Perbaikan utama: normalisasi tensor sebelum cache_video
+                # Pastikan tensor dalam range yang benar
+                logging.info(f"Video tensor shape: {video.shape}, dtype: {video.dtype}")
+                logging.info(f"Video tensor range: [{video.min():.3f}, {video.max():.3f}]")
+                
+                # Normalisasi tensor ke range [0, 1] jika diperlukan
+                if video.min() < 0:
+                    # Jika tensor dalam range [-1, 1], normalize ke [0, 1]
+                    video_normalized = (video + 1) / 2
+                else:
+                    # Jika sudah dalam range [0, 1] atau [0, 255]
+                    if video.max() > 1:
+                        video_normalized = video / 255.0
+                    else:
+                        video_normalized = video
+                
+                # Clamp untuk memastikan dalam range [0, 1]
+                video_normalized = torch.clamp(video_normalized, 0, 1)
+                
+                # Konversi ke uint8 untuk video
+                video_uint8 = (video_normalized * 255).to(torch.uint8)
+                
+                logging.info(f"Normalized video range: [{video_normalized.min():.3f}, {video_normalized.max():.3f}]")
+                logging.info(f"Final video dtype: {video_uint8.dtype}")
+                
+                cache_video(
+                    tensor=video_uint8[None],
+                    save_file=args.save_file,
+                    fps=cfg.sample_fps,
+                    nrow=1,
+                    normalize=False,  # Sudah dinormalisasi manual
+                    value_range=(0, 255))  # Range untuk uint8
+                    
+            except Exception as e:
+                logging.error(f"Error in cache_video: {e}")
+                logging.info("Trying alternative approach...")
+                
+                # Alternative: save dengan normalize=True dan value_range yang benar
+                try:
+                    cache_video(
+                        tensor=video[None],
+                        save_file=args.save_file,
+                        fps=cfg.sample_fps,
+                        nrow=1,
+                        normalize=True,
+                        value_range=(-1, 1) if video.min() < 0 else (0, 1))
+                except Exception as e2:
+                    logging.error(f"Alternative approach also failed: {e2}")
+                    raise e2
+                    
     logging.info("Finished.")
 
 

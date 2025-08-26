@@ -27,6 +27,8 @@ warnings.filterwarnings('ignore')
 import torch, random
 import torch.distributed as dist
 from PIL import Image, ImageOps
+import cv2
+import numpy as np
 
 import phantom_wan
 from phantom_wan.configs import WAN_CONFIGS, SIZE_CONFIGS, MAX_AREA_CONFIGS, SUPPORTED_SIZES
@@ -41,7 +43,7 @@ EXAMPLE_PROMPT = {
         "prompt": "Two anthropomorphic cats in comfy boxing gear and bright gloves fight intensely on a spotlighted stage.",
     },
     "t2i-14B": {
-        "prompt": "一个朴素端庄的美人",
+        "prompt": "ä¸€ä¸ªæœ´ç´ ç«¯åº„çš„ç¾Žäºº",
     },
     "i2v-14B": {
         "prompt":
@@ -52,10 +54,68 @@ EXAMPLE_PROMPT = {
 }
 
 
+def save_video_opencv(tensor, save_file, fps=24):
+    """
+    Fungsi alternatif untuk menyimpan video menggunakan OpenCV
+    """
+    try:
+        # Pastikan tensor dalam format yang benar [batch, frames, channels, height, width]
+        if len(tensor.shape) == 5:
+            video = tensor[0]  # Ambil batch pertama [frames, channels, height, width]
+        else:
+            video = tensor
+            
+        # Konversi dari [frames, channels, height, width] ke [frames, height, width, channels]
+        if video.shape[1] == 3:  # channels di dimensi ke-2
+            video = video.permute(0, 2, 3, 1)  # [frames, height, width, channels]
+            
+        # Pastikan video dalam range [0, 255] dan tipe uint8
+        if video.dtype != torch.uint8:
+            video = (video.clamp(0, 1) * 255).to(torch.uint8)
+            
+        # Konversi ke numpy
+        video_np = video.cpu().numpy()
+        
+        # Dapatkan dimensi
+        num_frames, height, width, channels = video_np.shape
+        
+        # Pastikan file memiliki ekstensi .mp4
+        if not save_file.endswith('.mp4'):
+            save_file = save_file + '.mp4'
+            
+        # Buat VideoWriter
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(save_file, fourcc, fps, (width, height))
+        
+        if not out.isOpened():
+            logging.error(f"Failed to open VideoWriter for {save_file}")
+            return False
+            
+        # Tulis setiap frame
+        for i in range(num_frames):
+            frame = video_np[i]
+            # Konversi RGB ke BGR untuk OpenCV
+            if channels == 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            out.write(frame)
+            
+        out.release()
+        logging.info(f"Video saved successfully to {save_file}")
+        return True
+        
+    except Exception as e:
+        logging.error(f"Error saving video with OpenCV: {str(e)}")
+        return False
+
+
 def _validate_args(args):
     # Basic check
     assert args.ckpt_dir is not None, "Please specify the checkpoint directory."
-    assert args.phantom_ckpt is not None, "Please specify the Phantom-Wan checkpoint."
+    
+    # Hanya cek phantom_ckpt untuk task yang memerlukan
+    if "s2v" in args.task:
+        assert args.phantom_ckpt is not None, "Please specify the Phantom-Wan checkpoint."
+    
     assert args.task in WAN_CONFIGS, f"Unsupport task: {args.task}"
 
     # The default sampling steps are 40 for image-to-video tasks and 50 for text-to-video tasks.
@@ -507,16 +567,48 @@ def generate(args):
         else:
             logging.info(f"Saving generated video to {args.save_file}")
 
-            video = (video + 1) / 2
-            video = (video.clamp(0, 1) * 255).to(torch.uint8)
+            # Normalisasi video tensor
+            video = (video + 1) / 2  # dari [-1, 1] ke [0, 1]
+            video = video.clamp(0, 1)  # pastikan dalam range [0, 1]
+            
+            # Debug: print info tentang tensor
+            logging.info(f"Video tensor shape: {video.shape}")
+            logging.info(f"Video tensor dtype: {video.dtype}")
+            logging.info(f"Video tensor range: [{video.min():.3f}, {video.max():.3f}]")
 
-            cache_video(
-                tensor=video[None],
-                save_file=args.save_file,
-                fps=cfg.sample_fps,
-                nrow=1,
-                normalize=False,  # Set normalize ke False
-                value_range=(0, 255)) # Perbaikan: Ubah value_range ke (0, 255) ok
+            # Coba simpan dengan cache_video original terlebih dahulu
+            try:
+                video_uint8 = (video * 255).to(torch.uint8)
+                cache_video(
+                    tensor=video_uint8[None],
+                    save_file=args.save_file,
+                    fps=cfg.sample_fps,
+                    nrow=1,
+                    normalize=False,
+                    value_range=(0, 255))
+                logging.info("Video saved successfully with original cache_video")
+            except Exception as e:
+                logging.warning(f"Original cache_video failed: {str(e)}")
+                logging.info("Trying alternative OpenCV method...")
+                
+                # Gunakan metode alternatif dengan OpenCV
+                success = save_video_opencv(video, args.save_file, fps=cfg.sample_fps)
+                if not success:
+                    logging.error("Failed to save video with both methods")
+                    # Sebagai fallback terakhir, simpan sebagai sequence gambar
+                    logging.info("Saving as image sequence as fallback...")
+                    os.makedirs(f"{args.save_file}_frames", exist_ok=True)
+                    video_uint8 = (video * 255).to(torch.uint8)
+                    for i, frame in enumerate(video_uint8):
+                        frame_path = f"{args.save_file}_frames/frame_{i:04d}.png"
+                        cache_image(
+                            tensor=frame.unsqueeze(0),
+                            save_file=frame_path,
+                            nrow=1,
+                            normalize=False,
+                            value_range=(0, 255))
+                    logging.info(f"Frames saved to {args.save_file}_frames/")
+
     logging.info("Finished.")
 
 

@@ -491,62 +491,46 @@ def generate(args):
     if rank == 0:
         if args.save_file is None:
             formatted_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-            formatted_prompt = args.prompt.replace(" ", "_").replace("/",
-                                                                     "_")[:50]
+            formatted_prompt = args.prompt.replace(" ", "_").replace("/", "_")[:50]
             suffix = '.png' if "t2i" in args.task else '.mp4'
-            args.save_file = f"{args.task}_{args.size}_{args.ulysses_size}_{args.ring_size}_{formatted_prompt}_{formatted_time}" + suffix
+            args.save_file = f"{args.task}_{args.size}_{args.ulysses_size}_{args.ring_size}_{formatted_prompt}_{formatted_time}{suffix}"
+        else:
+            # Ensure extension is added if not present
+            if "t2i" in args.task and not args.save_file.endswith('.png'):
+                args.save_file += '.png'
+            elif "t2i" not in args.task and not args.save_file.endswith('.mp4'):
+                args.save_file += '.mp4'
 
         if "t2i" in args.task:
             logging.info(f"Saving generated image to {args.save_file}")
-            cache_image(
-                tensor=video.squeeze(1)[None],
-                save_file=args.save_file,
-                nrow=1,
-                normalize=True,
-                value_range=(-1, 1))
+            try:
+                cache_image(
+                    tensor=video.squeeze(1)[None],
+                    save_file=args.save_file,
+                    nrow=1,
+                    normalize=True,
+                    value_range=(-1, 1))
+                logging.info(f"Image saved successfully to {args.save_file}")
+            except Exception as e:
+                logging.error(f"Error saving image: {e}")
+                raise e
         else:
             logging.info(f"Saving generated video to {args.save_file}")
-
+            
             try:
-                # Perbaikan utama: normalisasi tensor sebelum cache_video
-                # Pastikan tensor dalam range yang benar
+                # Log tensor information for debugging
                 logging.info(f"Video tensor shape: {video.shape}, dtype: {video.dtype}")
                 logging.info(f"Video tensor range: [{video.min():.3f}, {video.max():.3f}]")
                 
-                # Normalisasi tensor ke range [0, 1] jika diperlukan
-                if video.min() < 0:
-                    # Jika tensor dalam range [-1, 1], normalize ke [0, 1]
-                    video_normalized = (video + 1) / 2
-                else:
-                    # Jika sudah dalam range [0, 1] atau [0, 255]
-                    if video.max() > 1:
-                        video_normalized = video / 255.0
-                    else:
-                        video_normalized = video
+                # Ensure output directory exists
+                os.makedirs(os.path.dirname(args.save_file) if os.path.dirname(args.save_file) else '.', exist_ok=True)
                 
-                # Clamp untuk memastikan dalam range [0, 1]
-                video_normalized = torch.clamp(video_normalized, 0, 1)
+                # Try multiple approaches for saving video
+                save_successful = False
                 
-                # Konversi ke uint8 untuk video
-                video_uint8 = (video_normalized * 255).to(torch.uint8)
-                
-                logging.info(f"Normalized video range: [{video_normalized.min():.3f}, {video_normalized.max():.3f}]")
-                logging.info(f"Final video dtype: {video_uint8.dtype}")
-                
-                cache_video(
-                    tensor=video_uint8[None],
-                    save_file=args.save_file,
-                    fps=cfg.sample_fps,
-                    nrow=1,
-                    normalize=False,  # Sudah dinormalisasi manual
-                    value_range=(0, 255))  # Range untuk uint8
-                    
-            except Exception as e:
-                logging.error(f"Error in cache_video: {e}")
-                logging.info("Trying alternative approach...")
-                
-                # Alternative: save dengan normalize=True dan value_range yang benar
+                # Approach 1: Direct cache_video with original tensor
                 try:
+                    logging.info("Attempting to save with original tensor...")
                     cache_video(
                         tensor=video[None],
                         save_file=args.save_file,
@@ -554,11 +538,119 @@ def generate(args):
                         nrow=1,
                         normalize=True,
                         value_range=(-1, 1) if video.min() < 0 else (0, 1))
-                except Exception as e2:
-                    logging.error(f"Alternative approach also failed: {e2}")
-                    raise e2
                     
-    logging.info("Finished.")
+                    # Check if file was created and has reasonable size
+                    if os.path.exists(args.save_file) and os.path.getsize(args.save_file) > 1024:
+                        logging.info(f"Video saved successfully (approach 1): {args.save_file}")
+                        logging.info(f"File size: {os.path.getsize(args.save_file)} bytes")
+                        save_successful = True
+                    else:
+                        logging.warning("Approach 1 failed - file not created or too small")
+                        
+                except Exception as e:
+                    logging.warning(f"Approach 1 failed with error: {e}")
+                
+                # Approach 2: Manual normalization if approach 1 failed
+                if not save_successful:
+                    try:
+                        logging.info("Attempting to save with manual normalization...")
+                        
+                        # Manual normalization
+                        if video.min() < 0:
+                            video_normalized = (video + 1) / 2
+                        else:
+                            if video.max() > 1:
+                                video_normalized = video / 255.0
+                            else:
+                                video_normalized = video
+                        
+                        video_normalized = torch.clamp(video_normalized, 0, 1)
+                        video_uint8 = (video_normalized * 255).to(torch.uint8)
+                        
+                        logging.info(f"Normalized video range: [{video_normalized.min():.3f}, {video_normalized.max():.3f}]")
+                        
+                        cache_video(
+                            tensor=video_uint8[None],
+                            save_file=args.save_file,
+                            fps=cfg.sample_fps,
+                            nrow=1,
+                            normalize=False,
+                            value_range=(0, 255))
+                        
+                        # Check if file was created
+                        if os.path.exists(args.save_file) and os.path.getsize(args.save_file) > 1024:
+                            logging.info(f"Video saved successfully (approach 2): {args.save_file}")
+                            logging.info(f"File size: {os.path.getsize(args.save_file)} bytes")
+                            save_successful = True
+                        else:
+                            logging.warning("Approach 2 failed - file not created or too small")
+                            
+                    except Exception as e:
+                        logging.warning(f"Approach 2 failed with error: {e}")
+                
+                # Approach 3: Try with different parameters if still failed
+                if not save_successful:
+                    try:
+                        logging.info("Attempting to save with alternative parameters...")
+                        
+                        # Try without batching
+                        cache_video(
+                            tensor=video,
+                            save_file=args.save_file,
+                            fps=cfg.sample_fps,
+                            nrow=1,
+                            normalize=True,
+                            value_range=(-1, 1))
+                        
+                        # Check if file was created
+                        if os.path.exists(args.save_file) and os.path.getsize(args.save_file) > 1024:
+                            logging.info(f"Video saved successfully (approach 3): {args.save_file}")
+                            logging.info(f"File size: {os.path.getsize(args.save_file)} bytes")
+                            save_successful = True
+                        else:
+                            logging.warning("Approach 3 failed - file not created or too small")
+                            
+                    except Exception as e:
+                        logging.warning(f"Approach 3 failed with error: {e}")
+                
+                # If all approaches failed
+                if not save_successful:
+                    # Try to save as individual frames for debugging
+                    try:
+                        frames_dir = args.save_file.replace('.mp4', '_frames')
+                        os.makedirs(frames_dir, exist_ok=True)
+                        
+                        logging.info(f"Saving individual frames to {frames_dir} for debugging...")
+                        
+                        # Save first few frames as images
+                        for i in range(min(5, video.shape[1])):
+                            frame = video[:, i, :, :]  # [C, H, W]
+                            frame_path = os.path.join(frames_dir, f"frame_{i:03d}.png")
+                            cache_image(
+                                tensor=frame[None],
+                                save_file=frame_path,
+                                nrow=1,
+                                normalize=True,
+                                value_range=(-1, 1))
+                        
+                        logging.info("Individual frames saved for debugging")
+                        
+                    except Exception as frame_error:
+                        logging.error(f"Failed to save debug frames: {frame_error}")
+                    
+                    # Final error
+                    error_msg = f"All video saving approaches failed. Check the cache_video function and dependencies."
+                    logging.error(error_msg)
+                    raise RuntimeError(error_msg)
+                    
+            except Exception as e:
+                logging.error(f"Critical error in video saving: {e}")
+                logging.error(f"Video tensor info - Shape: {video.shape}, Dtype: {video.dtype}")
+                logging.error(f"Save file path: {args.save_file}")
+                logging.error(f"Output directory exists: {os.path.exists(os.path.dirname(args.save_file))}")
+                raise e
+
+    logging.info("Generation completed successfully.")
 
 
 if __name__ == "__main__":

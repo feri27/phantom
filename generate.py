@@ -507,16 +507,19 @@ def generate(args):
         else:
             logging.info(f"Saving generated video to {args.save_file}")
 
-            video = ((video + 1) / 2).clamp(0, 1) * 255
-            video = video.to(torch.uint8)
-            
+            # Perbaikan di sini:
+            # 1. Denormalisasi tensor dari rentang (-1, 1) ke (0, 1)
+            video = (video + 1) / 2
+            # 2. Skalakan ke rentang (0, 255) dan ubah tipe data ke uint8 (Byte)
+            video = (video.clamp(0, 1) * 255).to(torch.uint8)
+
             cache_video(
                 tensor=video[None],
                 save_file=args.save_file,
                 fps=cfg.sample_fps,
                 nrow=1,
-                normalize=False,
-                value_range=(-1, 1))
+                normalize=False,  # Set normalize ke False
+                value_range=(0, 255)) # Perbaikan: Ubah value_range ke (0, 255)
     logging.info("Finished.")
 
 

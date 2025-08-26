@@ -84,6 +84,7 @@ def generate_video_or_image(
     base_seed,
 ):
     if not prompt:
+        # Mengembalikan tiga nilai konsisten
         yield "Prompt cannot be empty.", None, None
         return
     
@@ -151,11 +152,12 @@ def generate_video_or_image(
             break
         if line:
             output_log_list.append(line)
-            # Yield three values to update output_log, output_image, and output_video
+            # Yield tiga nilai untuk memperbarui semua output
             yield "\n".join(output_log_list), None, None
     
     stderr = process.stderr.read()
     if process.returncode != 0:
+        # Mengembalikan tiga nilai konsisten saat error
         yield f"Error during generation: {stderr}", None, None
         return
 
@@ -164,10 +166,13 @@ def generate_video_or_image(
 
     if "t2i" in task:
         result_path = f"{save_file}.png"
+        # Mengembalikan tiga nilai saat sukses, dengan video None
         yield final_log, result_path, None
     else:
         result_path = f"{save_file}.mp4"
+        # Mengembalikan tiga nilai saat sukses, dengan gambar None
         yield final_log, None, result_path
+
 
 with gr.Blocks(title="Phantom-Wan Generator") as demo:
     gr.Markdown("# 👻 Phantom-Wan: Subject-Consistent Video Generation")

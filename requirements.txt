@@ -16,4 +16,3 @@ gradio>=5.0.0
 numpy>=1.23.5,<2
 xfuser>=0.4.1
 Pillow
-opencv-python==4.8.1.78

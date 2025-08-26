@@ -4,7 +4,7 @@ import os
 import shutil
 import random
 import re
-from PIL import Image  # Tambahkan baris ini
+from PIL import Image
 
 # Define the tasks and their default settings based on generate.py and README.md
 TASKS = {
@@ -84,15 +84,20 @@ def generate_video_or_image(
     base_seed,
 ):
     if not prompt:
-        raise gr.Error("Prompt cannot be empty.")
+        yield "Prompt cannot be empty.", None, None
+        return
     
+    # Check for model existence
     if not os.path.exists("./Wan2.1-T2V-1.3B"):
-        raise gr.Error("Wan2.1-T2V-1.3B model not found. Please run the model download script.")
+        yield "Wan2.1-T2V-1.3B model not found. Please run the model download script.", None, None
+        return
     
     if task == "s2v-1.3B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-1.3B.pth"):
-        raise gr.Error("Phantom-Wan-1.3B model not found. Please run the model download script.")
+        yield "Phantom-Wan-1.3B model not found. Please run the model download script.", None, None
+        return
     elif task == "s2v-14B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-14B.pth"):
-        raise gr.Error("Phantom-Wan-14B model not found. Please run the model download script.")
+        yield "Phantom-Wan-14B model not found. Please run the model download script.", None, None
+        return
 
     # Sanitize prompt for filename
     sanitized_prompt = re.sub(r'[^a-zA-Z0-9_ -]', '', prompt).replace(" ", "_").replace("/", "_")[:50]
@@ -107,7 +112,6 @@ def generate_video_or_image(
         shutil.rmtree(ref_image_dir, ignore_errors=True)
         os.makedirs(ref_image_dir)
         for i, img_path in enumerate(ref_images):
-            # Perbaikan: Buka file yang diunggah menggunakan PIL sebelum menyimpannya kembali.
             with Image.open(img_path) as img:
                 temp_path = os.path.join(ref_image_dir, f"ref_img_{i}.png")
                 img.save(temp_path)
@@ -140,28 +144,30 @@ def generate_video_or_image(
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     
     # Stream output to Gradio
-    output_log = []
+    output_log_list = []
     while True:
         line = process.stdout.readline()
         if not line and process.poll() is not None:
             break
         if line:
-            output_log.append(line)
-            yield "\n".join(output_log), None, None
+            output_log_list.append(line)
+            # Yield three values to update output_log, output_image, and output_video
+            yield "\n".join(output_log_list), None, None
     
     stderr = process.stderr.read()
     if process.returncode != 0:
-        raise gr.Error(f"Error during generation: {stderr}")
+        yield f"Error during generation: {stderr}", None, None
+        return
 
     # Determine output path and type
+    final_log = "\n".join(output_log_list)
+
     if "t2i" in task:
         result_path = f"{save_file}.png"
-        return_value = gr.Image(value=result_path, label="Generated Image")
+        yield final_log, result_path, None
     else:
         result_path = f"{save_file}.mp4"
-        return_value = gr.Video(value=result_path, label="Generated Video")
-    
-    return "\n".join(output_log), return_value
+        yield final_log, None, result_path
 
 with gr.Blocks(title="Phantom-Wan Generator") as demo:
     gr.Markdown("# 👻 Phantom-Wan: Subject-Consistent Video Generation")

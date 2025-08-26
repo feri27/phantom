@@ -72,6 +72,16 @@ def update_defaults(task):
         config.get("sample_shift", 5.0)
     )
 
+def get_generated_files():
+    """Memindai folder generated_outputs dan mengembalikan list path file."""
+    output_dir = "generated_outputs"
+    if not os.path.exists(output_dir):
+        return []
+    
+    file_paths = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
+    file_paths.sort(key=os.path.getmtime, reverse=True)
+    return file_paths
+
 def generate_video_or_image(
     task,
     prompt,
@@ -84,20 +94,19 @@ def generate_video_or_image(
     base_seed,
 ):
     if not prompt:
-        # Mengembalikan tiga nilai konsisten
-        yield "Prompt cannot be empty.", None, None
+        yield "Prompt cannot be empty.", None
         return
     
     # Check for model existence
     if not os.path.exists("./Wan2.1-T2V-1.3B"):
-        yield "Wan2.1-T2V-1.3B model not found. Please run the model download script.", None, None
+        yield "Wan2.1-T2V-1.3B model not found. Please run the model download script.", None
         return
     
     if task == "s2v-1.3B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-1.3B.pth"):
-        yield "Phantom-Wan-1.3B model not found. Please run the model download script.", None, None
+        yield "Phantom-Wan-1.3B model not found. Please run the model download script.", None
         return
     elif task == "s2v-14B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-14B.pth"):
-        yield "Phantom-Wan-14B model not found. Please run the model download script.", None, None
+        yield "Phantom-Wan-14B model not found. Please run the model download script.", None
         return
 
     # Sanitize prompt for filename
@@ -152,26 +161,23 @@ def generate_video_or_image(
             break
         if line:
             output_log_list.append(line)
-            # Yield tiga nilai untuk memperbarui semua output
-            yield "\n".join(output_log_list), None, None
+            yield "\n".join(output_log_list), None
     
     stderr = process.stderr.read()
     if process.returncode != 0:
-        # Mengembalikan tiga nilai konsisten saat error
-        yield f"Error during generation: {stderr}", None, None
+        yield f"Error during generation: {stderr}", None
         return
 
-    # Determine output path and type
-    final_log = "\n".join(output_log_list)
-
+    # Get the generated file path
     if "t2i" in task:
         result_path = f"{save_file}.png"
-        # Mengembalikan tiga nilai saat sukses, dengan video None
-        yield final_log, result_path, None
     else:
         result_path = f"{save_file}.mp4"
-        # Mengembalikan tiga nilai saat sukses, dengan gambar None
-        yield final_log, None, result_path
+
+    final_log = "\n".join(output_log_list)
+    
+    # Mengembalikan log dan daftar file yang diperbarui
+    yield final_log, get_generated_files()
 
 
 with gr.Blocks(title="Phantom-Wan Generator") as demo:
@@ -253,8 +259,8 @@ with gr.Blocks(title="Phantom-Wan Generator") as demo:
         with gr.Column():
             output_log = gr.Textbox(label="Process Log", lines=10, max_lines=10, interactive=False)
         with gr.Column():
-            output_image = gr.Image(label="Generated Image")
-            output_video = gr.Video(label="Generated Video")
+            # Mengganti gr.Video/gr.Image dengan gr.File untuk daftar file
+            output_file_list = gr.File(label="Generated Files", file_count="multiple", interactive=False)
 
     # Event handlers
     task_selector.change(
@@ -276,8 +282,11 @@ with gr.Blocks(title="Phantom-Wan Generator") as demo:
             sample_shift_slider,
             base_seed_number
         ],
-        outputs=[output_log, output_image, output_video]
+        outputs=[output_log, output_file_list]
     )
+
+    # Panggil fungsi get_generated_files saat antarmuka pertama kali dimuat
+    demo.load(get_generated_files, outputs=[output_file_list])
     
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=7860)

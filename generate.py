@@ -519,7 +519,7 @@ def generate(args):
                 fps=cfg.sample_fps,
                 nrow=1,
                 normalize=False,  # Set normalize ke False
-                value_range=(0, 255)) # Perbaikan: Ubah value_range ke (0, 255)
+                value_range=(0, 255)) # Perbaikan: Ubah value_range ke (0, 255) ok
     logging.info("Finished.")
 
 

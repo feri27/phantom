@@ -1129,24 +1129,24 @@ with gr.Blocks(title="Phantom-Wan Video Generator") as demo:
         show_progress=True
     )
     
-    # Add example section
-    with gr.Accordion("Examples", open=False):
-        gr.Markdown(
-            """
-            ### Example Prompts:
+    # # Add example section
+    # with gr.Accordion("Examples", open=False):
+    #     gr.Markdown(
+    #         """
+    #         ### Example Prompts:
             
-            **Text-to-Video (t2v):**
-            - "A majestic golden retriever running through a sunlit meadow, slow motion, cinematic lighting"
-            - "Two anthropomorphic cats in boxing gear fighting on a spotlighted stage"
+    #         **Text-to-Video (t2v):**
+    #         - "A majestic golden retriever running through a sunlit meadow, slow motion, cinematic lighting"
+    #         - "Two anthropomorphic cats in boxing gear fighting on a spotlighted stage"
             
-            **Subject-to-Video (s2v):**
-            - "The subject is dancing gracefully in a ballroom" (requires reference images)
-            - "The character is walking down a busy street at sunset" (requires reference images)
+    #         **Subject-to-Video (s2v):**
+    #         - "The subject is dancing gracefully in a ballroom" (requires reference images)
+    #         - "The character is walking down a busy street at sunset" (requires reference images)
             
-            **Image-to-Video (i2v):**
-            - "The scene comes alive with gentle movement, leaves rustling in the wind"
-            """
-        )
+    #         **Image-to-Video (i2v):**
+    #         - "The scene comes alive with gentle movement, leaves rustling in the wind"
+    #         """
+    #     )
 
 if __name__ == "__main__":
     demo.launch(

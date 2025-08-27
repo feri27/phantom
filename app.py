@@ -882,9 +882,9 @@ def generate_video(
     if not os.path.exists("./Wan2.1-T2V-1.3B"):
         return "Error: Wan2.1-T2V-1.3B model not found. Please run the model download script.", None
     
-    if task == "s2v-1.3B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-1.3B.pth"):
+    if task == "s2v-1.3B" and not os.path.exists("./Phantom-Wan-Models"):
         return "Error: Phantom-Wan-1.3B model not found. Please run the model download script.", None
-    elif task == "s2v-14B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-14B.pth"):
+    elif task == "s2v-14B" and not os.path.exists("./Phantom-Wan-Models"):
         return "Error: Phantom-Wan-14B model not found. Please run the model download script.", None
 
     # Sanitize prompt for filename

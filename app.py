@@ -882,7 +882,7 @@ def generate_video(
     if not os.path.exists("./Wan2.1-T2V-1.3B"):
         return "Error: Wan2.1-T2V-1.3B model not found. Please run the model download script.", None
     
-    if task == "s2v-1.3B" and not os.path.exists("./Phantom-Wan-Models"):
+    if task == "s2v-1.3B" and not os.path.exists("./Phantom-Wan-Models/Phantom-Wan-1.3B.pth"):
         return "Error: Phantom-Wan-1.3B model not found. Please run the model download script.", None
     elif task == "s2v-14B" and not os.path.exists("./Phantom-Wan-Models"):
         return "Error: Phantom-Wan-14B model not found. Please run the model download script.", None
@@ -928,7 +928,7 @@ def generate_video(
     ]
 
     if "s2v" in task:
-        phantom_ckpt_path = "./Phantom-Wan-Models/Phantom-Wan-1.3B.pth" if "1.3B" in task else "./Phantom-Wan-Models/Phantom-Wan-14B.pth"
+        phantom_ckpt_path = "./Phantom-Wan-Models/Phantom-Wan-1.3B.pth" if "1.3B" in task else "./Phantom-Wan-Models"
         command.extend(["--phantom_ckpt", phantom_ckpt_path])
         if ref_image_paths:
             command.extend(["--ref_image", ",".join(ref_image_paths)])

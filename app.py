@@ -762,7 +762,6 @@
     
 # if __name__ == "__main__":
 #     demo.launch(server_name="0.0.0.0", server_port=7860)
-
 import gradio as gr
 import subprocess
 import os
@@ -1008,7 +1007,7 @@ def generate_video(
         return f"Unexpected error during generation: {str(e)}", None
 
 # Create Gradio interface
-with gr.Blocks(title="Phantom-Wan Video Generator", theme=gr.themes.Soft()) as demo:
+with gr.Blocks(title="Phantom-Wan Video Generator") as demo:
     gr.Markdown(
         """
         # 👻 Phantom-Wan: Subject-Consistent Video Generation
@@ -1025,22 +1024,19 @@ with gr.Blocks(title="Phantom-Wan Video Generator", theme=gr.themes.Soft()) as d
                     label="Task",
                     choices=list(TASKS.keys()),
                     value="s2v-1.3B",
-                    interactive=True,
-                    info="Choose the generation task and model size"
+                    interactive=True
                 )
                 prompt_input = gr.Textbox(
                     label="Prompt",
                     placeholder="Enter your video description here...",
-                    lines=3,
-                    info="Describe what you want to see in the video"
+                    lines=3
                 )
                 
                 ref_image_gallery = gr.File(
                     label="Reference Images (for s2v tasks only)",
                     file_count="multiple",
                     file_types=["image"],
-                    interactive=True,
-                    info="Upload 1-4 reference images for subject consistency (s2v tasks only)"
+                    interactive=True
                 )
         
         with gr.Column(scale=1):
@@ -1058,8 +1054,7 @@ with gr.Blocks(title="Phantom-Wan Video Generator", theme=gr.themes.Soft()) as d
                         maximum=201,
                         step=4,
                         value=81,
-                        interactive=True,
-                        info="Must be 4n+1 format"
+                        interactive=True
                     )
                 with gr.Row():
                     sample_steps_slider = gr.Slider(
@@ -1068,8 +1063,7 @@ with gr.Blocks(title="Phantom-Wan Video Generator", theme=gr.themes.Soft()) as d
                         maximum=100,
                         step=1,
                         value=40,
-                        interactive=True,
-                        info="More steps = better quality, slower generation"
+                        interactive=True
                     )
                     sample_solver_dropdown = gr.Dropdown(
                         label="Sampler",
@@ -1084,22 +1078,18 @@ with gr.Blocks(title="Phantom-Wan Video Generator", theme=gr.themes.Soft()) as d
                         maximum=10,
                         step=0.1,
                         value=5.0,
-                        interactive=True,
-                        info="Sampling shift factor"
+                        interactive=True
                     )
                     base_seed_number = gr.Number(
                         label="Seed",
                         value=-1,
                         step=1,
-                        interactive=True,
-                        info="Use -1 for random seed"
+                        interactive=True
                     )
 
     generate_btn = gr.Button(
-        "🎬 Generate Video!", 
-        variant="primary", 
-        size="lg",
-        scale=1
+        "Generate Video!", 
+        variant="primary"
     )
     
     with gr.Row():
@@ -1108,14 +1098,11 @@ with gr.Blocks(title="Phantom-Wan Video Generator", theme=gr.themes.Soft()) as d
                 label="Generation Log", 
                 lines=12, 
                 max_lines=12, 
-                interactive=False,
-                show_copy_button=True
+                interactive=False
             )
         with gr.Column(scale=1):
             output_video = gr.Video(
-                label="Generated Video",
-                show_share_button=True,
-                show_download_button=True
+                label="Generated Video"
             )
 
     # Event handlers
